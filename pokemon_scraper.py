@@ -28,22 +28,21 @@ class PokemonScrapper(scrapy.Spider):
 
         if links_evolucoes:
             request = Request(links_evolucoes[0], callback=self.evolution_data, dont_filter=True)
-            request.meta['pokemon_dados'] = {
-                'pokemon_id': response.css('.vitals-table > tbody > tr:nth-child(1) > td > strong::text').get(),
-                'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
-                'pokemon_name': response.css('#main > h1::text').get(),
-                'next_evolutions': []
-            }
+            request.meta['pokemon_dados'] = self.getting_data(response)
             request.meta['links_evolucoes_pendentes'] = links_evolucoes[1:]
             yield request
         else:
-            yield {
-                'pokemon_id': response.css('.vitals-table > tbody > tr:nth-child(1) > td > strong::text').get(),
-                'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
-                'pokemon_name': response.css('#main > h1::text').get(),
-                'next_evolutions': []
-            }
+            yield self.getting_data(response)
 
+    def getting_data(self, response):
+        return {
+            'pokemon_id': response.css('.vitals-table > tbody > tr:nth-child(1) > td > strong::text').get(),
+            'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
+            'pokemon_name': response.css('#main > h1::text').get(),
+            'next_evolutions': [],
+            'pokemon_size': str((float(response.css('.vitals-table > tbody > tr:nth-child(4) > td::text').get().split(" ", 1)[0]) * 100)) + ' cm',
+            'pokemon_weight': response.css('.vitals-table > tbody > tr:nth-child(5) > td::text').get().split(" ", 1)[0] + ' kg'
+        }
     def evolution_data(self, response):
         pokemon_dados = response.meta['pokemon_dados']
         links_evolucoes_pendentes = response.meta['links_evolucoes_pendentes']
