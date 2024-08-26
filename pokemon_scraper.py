@@ -1,45 +1,64 @@
 import scrapy
+from scrapy.http import Request
 
 
 class PokemonScrapper(scrapy.Spider):
     name = 'pokemon_scrapper'
     domain = "https://pokemondb.net"
-
     start_urls = ["https://pokemondb.net/pokedex/all"]
 
     def parse(self, response):
         pokemons = response.css('#pokedex > tbody > tr')
-        # for pokemon in pokemons:
-        pokemon = pokemons[0]
-        link = pokemon.css("td.cell-name > a::attr(href)").extract_first()
-        yield response.follow(self.domain + link, self.parse_pokemon)
+        for pokemon in pokemons:
+        # pokemon = pokemons[0]
+            link = pokemon.css("td.cell-name > a::attr(href)").extract_first()
+            yield response.follow(self.domain + link, self.parse_pokemon, dont_filter=True)
 
     def parse_pokemon(self, response):
         prefix_domain = "https://pokemondb.net"
+        atual_pokemon_url = response.css('link[rel="canonical"]::attr(href)').get()
 
-        # TODO: remover os links das evoluções que sejam o pokemon atual
         links_evolucoes = []
         lista_evolucoes = response.css('.infocard-list-evo > div')
         for evolucao in lista_evolucoes:
             links_evolucoes.append(prefix_domain + evolucao.css(".infocard-lg-img > a::attr(href)").get())
 
-        links_evolucoes.pop(0)
+        if atual_pokemon_url in links_evolucoes:
+            links_evolucoes.remove(atual_pokemon_url)
 
-        yield {
-            'pokemon_id': response.css('.vitals-table > tbody > tr:nth-child(1) > td > strong::text').get(),
-            'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
-            'pokemon_name': response.css('#main > h1::text').get(),
-            'next_evolutions': [x for x in self.parse_evolution(links_evolucoes, response)]
-            # 'next_evolution': response.css(
-            #     '#main > div.infocard-list-evo > div:nth-child(3) > span.infocard-lg-data.text-muted > a::text').get()
-        }
-
-    def parse_evolution(self, links_evolucoes, response):
-        yield from response.follow_all(links_evolucoes, self.evolution_data)
+        if links_evolucoes:
+            request = Request(links_evolucoes[0], callback=self.evolution_data, dont_filter=True)
+            request.meta['pokemon_dados'] = {
+                'pokemon_id': response.css('.vitals-table > tbody > tr:nth-child(1) > td > strong::text').get(),
+                'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
+                'pokemon_name': response.css('#main > h1::text').get(),
+                'next_evolutions': []
+            }
+            request.meta['links_evolucoes_pendentes'] = links_evolucoes[1:]
+            yield request
+        else:
+            yield {
+                'pokemon_id': response.css('.vitals-table > tbody > tr:nth-child(1) > td > strong::text').get(),
+                'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
+                'pokemon_name': response.css('#main > h1::text').get(),
+                'next_evolutions': []
+            }
 
     def evolution_data(self, response):
-        yield {
+        pokemon_dados = response.meta['pokemon_dados']
+        links_evolucoes_pendentes = response.meta['links_evolucoes_pendentes']
+
+        evolution_info = {
             'pokemon_id': response.css('.vitals-table > tbody > tr:nth-child(1) > td > strong::text').get(),
             'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
             'pokemon_name': response.css('#main > h1::text').get()
         }
+        pokemon_dados['next_evolutions'].append(evolution_info)
+
+        if links_evolucoes_pendentes:
+            next_request = Request(links_evolucoes_pendentes[0], callback=self.evolution_data, dont_filter=True)
+            next_request.meta['pokemon_dados'] = pokemon_dados
+            next_request.meta['links_evolucoes_pendentes'] = links_evolucoes_pendentes[1:]
+            yield next_request
+        else:
+            yield pokemon_dados
