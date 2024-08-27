@@ -26,29 +26,29 @@ class PokemonScrapper(scrapy.Spider):
         if atual_pokemon_url in links_evolucoes:
             links_evolucoes.remove(atual_pokemon_url)
 
+        table_path = ".sv-tabs-panel.active > div:nth-child(1) > div:nth-child(2) > table > tbody"
+
         poke_tipos = []
-        lista_tipos = response.css('.vitals-table > tbody > tr:nth-child(2) > td > a')
+        lista_tipos = response.css(f"{table_path} > tr:nth-child(2) > td > a")
         for tipo in lista_tipos:
             poke_tipos.append(tipo.css('::text').get())
 
-        # print(f"AAAAAAAAAAAAAAAAAAAAAAAAAA{poke_tipos}")
-
         if links_evolucoes:
             request = Request(links_evolucoes[0], callback=self.evolution_data, dont_filter=True)
-            request.meta['pokemon_dados'] = self.getting_data(response, poke_tipos)
+            request.meta['pokemon_dados'] = self.getting_data(response, poke_tipos, table_path)
             request.meta['links_evolucoes_pendentes'] = links_evolucoes[1:]
             yield request
         else:
-            yield self.getting_data(response, poke_tipos)
+            yield self.getting_data(response, poke_tipos, table_path)
 
-    def getting_data(self, response, poke_tipos):
+    def getting_data(self, response, poke_tipos, table_path):
         return {
-            'pokemon_id': response.css('.vitals-table > tbody > tr:nth-child(1) > td > strong::text').get(),
+            'pokemon_id': response.css(f'{table_path} > tr:nth-child(1) > td > strong::text').get(),
             'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
             'pokemon_name': response.css('#main > h1::text').get(),
             'next_evolutions': [],
-            'pokemon_size': str((float(response.css('.vitals-table > tbody > tr:nth-child(4) > td::text').get().split(" ", 1)[0]) * 100)) + ' cm',
-            'pokemon_weight': response.css('.vitals-table > tbody > tr:nth-child(5) > td::text').get().split(" ", 1)[0] + ' kg',
+            'pokemon_size': str((float(response.css(f'{table_path} > tr:nth-child(4) > td::text').get().split(" ", 1)[0]) * 100)) + ' cm',
+            'pokemon_weight': response.css(f'{table_path} > tr:nth-child(5) > td::text').get().split(" ", 1)[0] + ' kg',
             'pokemon_types': poke_tipos
         }
     def evolution_data(self, response):
