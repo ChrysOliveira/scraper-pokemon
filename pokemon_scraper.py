@@ -1,7 +1,6 @@
 import scrapy
 from scrapy.http import Request
 
-
 class PokemonScrapper(scrapy.Spider):
     name = 'pokemon_scrapper'
     domain = "https://pokemondb.net"
@@ -52,10 +51,9 @@ class PokemonScrapper(scrapy.Spider):
         links_evolucoes = response.meta['links_evolucoes']
 
         ability_info = {
-            'ability_url': response.css('link[rel="canonical"]::attr(href)').get(),
             'ability_name': str(response.css('main > h1::text').get()).strip(),
             'ability_desc': response.css('main > div > div > div > .vitals-table > tbody > tr:nth-Child(1) > td::text').get(),
-            'ability_effect': response.css('main > div > div > p').get()
+            'ability_url': response.css('link[rel="canonical"]::attr(href)').get()
         }
 
         response.meta['lista'].append(ability_info)
@@ -90,12 +88,12 @@ class PokemonScrapper(scrapy.Spider):
         links_evolucoes_pendentes = response.meta['links_evolucoes_pendentes']
 
         evolution_info = {
-            'pokemon_id': response.css('.vitals-table > tbody > tr:nth-child(1) > td > strong::text').get(),
-            'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
-            'pokemon_name': response.css('#main > h1::text').get()
+            'evo_pokemon_id': response.css('.vitals-table > tbody > tr:nth-child(1) > td > strong::text').get(),
+            'evo_pokemon_name': response.css('#main > h1::text').get(),
+            'evo_pokemon_url': response.css('link[rel="canonical"]::attr(href)').get()
         }
 
-        if evolution_info['pokemon_id'] > pokemon_dados['pokemon_id']:
+        if evolution_info['evo_pokemon_id'] > pokemon_dados['pokemon_id']:
             pokemon_dados['next_evolutions'].append(evolution_info)
 
         if links_evolucoes_pendentes:
@@ -109,12 +107,13 @@ class PokemonScrapper(scrapy.Spider):
     def getting_data(self, response, poke_tipos, table_path, habilidades):
         return {
             'pokemon_id': response.css(f'{table_path} > tr:nth-child(1) > td > strong::text').get(),
-            'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
             'pokemon_name': response.css('#main > h1::text').get(),
-            'next_evolutions': [],
-            'pokemon_size': str(
-                round((float(response.css(f'{table_path} > tr:nth-child(4) > td::text').get().split(" ", 1)[0]) * 100), 2)) + ' cm',
-            'pokemon_weight': response.css(f'{table_path} > tr:nth-child(5) > td::text').get().split(" ", 1)[0] + ' kg',
             'pokemon_types': poke_tipos,
-            'pokemon_abilities': habilidades
+            'pokemon_size': str(round((float(response.css(
+                f'{table_path} > tr:nth-child(4) > td::text').get().split(" ", 1)[0]) * 100), 0)) + ' cm',
+            'pokemon_weight': response.css(
+                f'{table_path} > tr:nth-child(5) > td::text').get().split(" ", 1)[0] + ' kg',
+            'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
+            'pokemon_abilities': habilidades,
+            'next_evolutions': []
         }
