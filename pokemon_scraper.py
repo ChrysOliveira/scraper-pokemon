@@ -10,7 +10,7 @@ class PokemonScrapper(scrapy.Spider):
     def parse(self, response):
         pokemons = response.css('#pokedex > tbody > tr')
         for pokemon in pokemons:
-            # pokemon = pokemons[0]
+            #pokemon = pokemons[1]
             link = pokemon.css("td.cell-name > a::attr(href)").extract_first()
             yield response.follow(self.domain + link, self.parse_pokemon, dont_filter=True)
 
@@ -52,7 +52,10 @@ class PokemonScrapper(scrapy.Spider):
         links_evolucoes = response.meta['links_evolucoes']
 
         ability_info = {
-            'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
+            'ability_url': response.css('link[rel="canonical"]::attr(href)').get(),
+            'ability_name': str(response.css('main > h1::text').get()).strip(),
+            'ability_desc': response.css('main > div > div > div > .vitals-table > tbody > tr:nth-Child(1) > td::text').get(),
+            'ability_effect': response.css('main > div > div > p').get()
         }
 
         response.meta['lista'].append(ability_info)
@@ -92,7 +95,8 @@ class PokemonScrapper(scrapy.Spider):
             'pokemon_name': response.css('#main > h1::text').get()
         }
 
-        pokemon_dados['next_evolutions'].append(evolution_info)
+        if evolution_info['pokemon_id'] > pokemon_dados['pokemon_id']:
+            pokemon_dados['next_evolutions'].append(evolution_info)
 
         if links_evolucoes_pendentes:
             next_request = Request(links_evolucoes_pendentes[0], callback=self.evolution_data, dont_filter=True)
@@ -107,11 +111,9 @@ class PokemonScrapper(scrapy.Spider):
             'pokemon_id': response.css(f'{table_path} > tr:nth-child(1) > td > strong::text').get(),
             'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
             'pokemon_name': response.css('#main > h1::text').get(),
-            'next_evolutions': [],  # TODO: remover des-evolucoes
+            'next_evolutions': [],
             'pokemon_size': str(
-                (float(
-                    response.css(f'{table_path} > tr:nth-child(4) > td::text').get().split(" ", 1)[0]) * 100)) + ' cm',
-            # TODO: arredondar o valor para 2 casas
+                round((float(response.css(f'{table_path} > tr:nth-child(4) > td::text').get().split(" ", 1)[0]) * 100), 2)) + ' cm',
             'pokemon_weight': response.css(f'{table_path} > tr:nth-child(5) > td::text').get().split(" ", 1)[0] + ' kg',
             'pokemon_types': poke_tipos,
             'pokemon_abilities': habilidades
