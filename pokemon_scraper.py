@@ -13,33 +13,10 @@ class PokemonScrapper(scrapy.Spider):
 
     def parse(self, response):
         pokemons = response.css('#pokedex > tbody > tr')
+        # pokemon = pokemons[0]
         for pokemon in pokemons:
-            # pokemon = pokemons[1]
             link = pokemon.css("td.cell-name > a::attr(href)").extract_first()
             yield response.follow(self.domain + link, self.parse_pokemon, dont_filter=True)
-
-    @classmethod
-    def from_crawler(cls, crawler, *args, **kwargs):
-        spider = super(PokemonScrapper, cls).from_crawler(crawler, *args, **kwargs)
-        crawler.signals.connect(spider.feed_exporter_closed, signal=signals.feed_exporter_closed)
-        return spider
-
-    def feed_exporter_closed(self):
-        file_path = "pokemons.json"
-
-        with open(file_path) as file:
-            data = json.load(file)
-
-        df = pd.json_normalize(data, max_level=1)
-        df.drop_duplicates(subset=['pokemon_id'] ,inplace = True)
-        df.sort_values(by=['pokemon_id'], inplace=True)
-        df.set_index('pokemon_id', inplace=True)
-        df.rename(columns={"pokemon_url": "URL", "pokemon_name": "Nome",
-                           "next_evolutions": "Evoluções", "pokemon_size": "Tamanho","pokemon_weight": "Peso",
-                           "pokemon_types": "Tipos", "pokemon_abilities": "Habilidades"}, inplace=True)
-        df.rename_axis("ID", inplace=True)
-        print(df)
-        df.to_json('pokemon_tratado.json')
 
     def parse_pokemon(self, response):
         prefix_domain = "https://pokemondb.net"
@@ -79,10 +56,11 @@ class PokemonScrapper(scrapy.Spider):
         links_evolucoes = response.meta['links_evolucoes']
 
         ability_info = {
-            'ability_url': response.css('link[rel="canonical"]::attr(href)').get(),
             'ability_name': str(response.css('main > h1::text').get()).strip(),
-            'ability_desc': response.css('main > div > div > div > .vitals-table > tbody > tr:nth-Child(1) > td::text').get(),
-            'ability_effect': response.css('main > div > div > p').get()
+            'ability_desc': response.css(
+                'main > div > div > div > .vitals-table > tbody > tr:nth-Child(1) > td::text').get(),
+            'ability_effect': response.css('main > div > div > p').get(),
+            'ability_url': response.css('link[rel="canonical"]::attr(href)').get()
         }
 
         response.meta['lista'].append(ability_info)
@@ -117,12 +95,12 @@ class PokemonScrapper(scrapy.Spider):
         links_evolucoes_pendentes = response.meta['links_evolucoes_pendentes']
 
         evolution_info = {
-            'pokemon_id': response.css('.vitals-table > tbody > tr:nth-child(1) > td > strong::text').get(),
-            'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
-            'pokemon_name': response.css('#main > h1::text').get()
+            'evo_pokemon_id': response.css('.vitals-table > tbody > tr:nth-child(1) > td > strong::text').get(),
+            'evo_pokemon_name': response.css('#main > h1::text').get(),
+            'evo_pokemon_url': response.css('link[rel="canonical"]::attr(href)').get()
         }
 
-        if evolution_info['pokemon_id'] > pokemon_dados['pokemon_id']:
+        if evolution_info['evo_pokemon_id'] > pokemon_dados['pokemon_id']:
             pokemon_dados['next_evolutions'].append(evolution_info)
 
         if links_evolucoes_pendentes:
@@ -136,12 +114,36 @@ class PokemonScrapper(scrapy.Spider):
     def getting_data(self, response, poke_tipos, table_path, habilidades):
         return {
             'pokemon_id': response.css(f'{table_path} > tr:nth-child(1) > td > strong::text').get(),
-            'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
             'pokemon_name': response.css('#main > h1::text').get(),
-            'next_evolutions': [],
-            'pokemon_size': str(
-                round((float(response.css(f'{table_path} > tr:nth-child(4) > td::text').get().split(" ", 1)[0]) * 100), 2)) + ' cm',
-            'pokemon_weight': response.css(f'{table_path} > tr:nth-child(5) > td::text').get().split(" ", 1)[0] + ' kg',
             'pokemon_types': poke_tipos,
-            'pokemon_abilities': habilidades
+            'pokemon_size': str(round((float(response.css(
+                f'{table_path} > tr:nth-child(4) > td::text').get().split(" ", 1)[0]) * 100), 2)) + ' cm',
+            'pokemon_weight': response.css(
+                f'{table_path} > tr:nth-child(5) > td::text').get().split(" ", 1)[0] + ' kg',
+            'pokemon_url': response.css('link[rel="canonical"]::attr(href)').get(),
+            'pokemon_abilities': habilidades,
+            'next_evolutions': []
         }
+
+    @classmethod
+    def from_crawler(cls, crawler, *args, **kwargs):
+        spider = super(PokemonScrapper, cls).from_crawler(crawler, *args, **kwargs)
+        crawler.signals.connect(spider.feed_exporter_closed, signal=signals.feed_exporter_closed)
+        return spider
+
+    def feed_exporter_closed(self):
+        file_path = "pokemons.json"
+
+        with open(file_path) as file:
+            data = json.load(file)
+
+        df = pd.json_normalize(data, max_level=None)
+        df.drop_duplicates(subset=['pokemon_id'], inplace=True)
+        df.sort_values(by=['pokemon_id'], inplace=True)
+        df.set_index('pokemon_id', inplace=True)
+        df.rename(columns={"pokemon_name": "Nome", "pokemon_types": "Tipos",
+                           "pokemon_size": "Tamanho", "pokemon_weight": "Peso", "pokemon_url": "URL",
+                           "pokemon_abilities": "Habilidades", "next_evolutions": "Evoluções"}, inplace=True)
+        df.rename_axis("ID", inplace=True)
+        print(df)
+        df.to_html('pokemon_tratado.html')
