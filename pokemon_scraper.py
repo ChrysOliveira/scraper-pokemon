@@ -1,6 +1,10 @@
 import scrapy
 from scrapy.http import Request
-
+from scrapy.crawler import CrawlerProcess
+from scrapy import signals
+import pandas as pd
+import json
+import time
 
 class PokemonScrapper(scrapy.Spider):
     name = 'pokemon_scrapper'
@@ -10,9 +14,32 @@ class PokemonScrapper(scrapy.Spider):
     def parse(self, response):
         pokemons = response.css('#pokedex > tbody > tr')
         for pokemon in pokemons:
-            #pokemon = pokemons[1]
+            # pokemon = pokemons[1]
             link = pokemon.css("td.cell-name > a::attr(href)").extract_first()
             yield response.follow(self.domain + link, self.parse_pokemon, dont_filter=True)
+
+    @classmethod
+    def from_crawler(cls, crawler, *args, **kwargs):
+        spider = super(PokemonScrapper, cls).from_crawler(crawler, *args, **kwargs)
+        crawler.signals.connect(spider.feed_exporter_closed, signal=signals.feed_exporter_closed)
+        return spider
+
+    def feed_exporter_closed(self):
+        file_path = "pokemons.json"
+
+        with open(file_path) as file:
+            data = json.load(file)
+
+        df = pd.json_normalize(data, max_level=1)
+        df.drop_duplicates(subset=['pokemon_id'] ,inplace = True)
+        df.sort_values(by=['pokemon_id'], inplace=True)
+        df.set_index('pokemon_id', inplace=True)
+        df.rename(columns={"pokemon_url": "URL", "pokemon_name": "Nome",
+                           "next_evolutions": "Evoluções", "pokemon_size": "Tamanho","pokemon_weight": "Peso",
+                           "pokemon_types": "Tipos", "pokemon_abilities": "Habilidades"}, inplace=True)
+        df.rename_axis("ID", inplace=True)
+        print(df)
+        df.to_json('pokemon_tratado.json')
 
     def parse_pokemon(self, response):
         prefix_domain = "https://pokemondb.net"
