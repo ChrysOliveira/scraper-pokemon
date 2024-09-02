@@ -1,10 +1,12 @@
+
+# Para executar o Scrapy, é necessário criar um script com o seguinte texto:
+# scrapy runspider pokemon_scraper.py -O pokemons.json:json
+
 import scrapy
 from scrapy.http import Request
-from scrapy.crawler import CrawlerProcess
 from scrapy import signals
 import pandas as pd
 import json
-import time
 
 class PokemonScrapper(scrapy.Spider):
     name = 'pokemon_scrapper'
@@ -13,7 +15,6 @@ class PokemonScrapper(scrapy.Spider):
 
     def parse(self, response):
         pokemons = response.css('#pokedex > tbody > tr')
-        # pokemon = pokemons[0]
         for pokemon in pokemons:
             link = pokemon.css("td.cell-name > a::attr(href)").extract_first()
             yield response.follow(self.domain + link, self.parse_pokemon, dont_filter=True)
@@ -59,7 +60,6 @@ class PokemonScrapper(scrapy.Spider):
             'ability_name': str(response.css('main > h1::text').get()).strip(),
             'ability_desc': response.css(
                 'main > div > div > div > .vitals-table > tbody > tr:nth-Child(1) > td::text').get(),
-            'ability_effect': response.css('main > div > div > p').get(),
             'ability_url': response.css('link[rel="canonical"]::attr(href)').get()
         }
 
@@ -101,7 +101,8 @@ class PokemonScrapper(scrapy.Spider):
         }
 
         if evolution_info['evo_pokemon_id'] > pokemon_dados['pokemon_id']:
-            pokemon_dados['next_evolutions'].append(evolution_info)
+            if evolution_info not in pokemon_dados['next_evolutions']:
+                pokemon_dados['next_evolutions'].append(evolution_info)
 
         if links_evolucoes_pendentes:
             next_request = Request(links_evolucoes_pendentes[0], callback=self.evolution_data, dont_filter=True)
@@ -137,13 +138,14 @@ class PokemonScrapper(scrapy.Spider):
         with open(file_path) as file:
             data = json.load(file)
 
-        df = pd.json_normalize(data, max_level=None)
+        df = pd.json_normalize(data, max_level=1)
         df.drop_duplicates(subset=['pokemon_id'], inplace=True)
         df.sort_values(by=['pokemon_id'], inplace=True)
         df.set_index('pokemon_id', inplace=True)
         df.rename(columns={"pokemon_name": "Nome", "pokemon_types": "Tipos",
                            "pokemon_size": "Tamanho", "pokemon_weight": "Peso", "pokemon_url": "URL",
-                           "pokemon_abilities": "Habilidades", "next_evolutions": "Evoluções"}, inplace=True)
+                           "pokemon_abilities": "Habilidades", "next_evolutions": "Evolucoes"}, inplace=True)
         df.rename_axis("ID", inplace=True)
         print(df)
-        df.to_html('pokemon_tratado.html')
+        df.to_json('pokemons_tratados.json')
+        df.to_html('pokemons_tratados.html')
