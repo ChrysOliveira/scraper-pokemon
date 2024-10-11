@@ -7,6 +7,8 @@ from scrapy.http import Request
 from scrapy import signals
 import pandas as pd
 import json
+from neo4j_connection import Neo4jConnection
+from neo4j_connection import CriarAmizades
 
 class PokemonScrapper(scrapy.Spider):
     name = 'pokemon_scrapper'
