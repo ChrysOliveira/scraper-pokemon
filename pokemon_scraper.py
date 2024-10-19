@@ -7,8 +7,6 @@ from scrapy.http import Request
 from scrapy import signals
 import pandas as pd
 import json
-from neo4j_connection import Neo4jConnection, consultar
-from neo4j_connection import CriarAmizades
 
 class PokemonScrapper(scrapy.Spider):
     name = 'pokemon_scrapper'
@@ -18,7 +16,8 @@ class PokemonScrapper(scrapy.Spider):
     def parse(self, response):
         pokemons = response.css('#pokedex > tbody > tr')
         for pokemon in pokemons:
-            # pokemon = pokemons[pokemon]
+            # pokemonn = pokemons[pokemon]
+            # link = pokemonn.css("td.cell-name > a::attr(href)").extract_first()
             link = pokemon.css("td.cell-name > a::attr(href)").extract_first()
             yield response.follow(self.domain + link, self.parse_pokemon, dont_filter=True)
 
@@ -152,133 +151,4 @@ class PokemonScrapper(scrapy.Spider):
         print(df)
         df.to_json('pokemons_tratados.json')
         df.to_html('pokemons_tratados.html')
-
-        with open('pokemons_tratados.json') as file:
-            data_converted = json.load(file)
-
-        data_to_neo4j = ''
-        type_set = set()
-        ability_set = set()
-
-        conexoes = CriarAmizades()
-        conexoes.zera_base()
-
-        for i in data_converted["Nome"]:
-            nome = data_converted["Nome"][i]
-
-            if "♀" in nome:
-                nome = nome.replace("♀ (female)", "_fem")
-            elif "♂" in nome:
-                nome = nome.replace("♂ (male)", "_masc")
-            elif "'" in nome:
-                nome = nome.replace("'", "_")
-            elif "." in nome:
-                nome = nome.replace(".", "")
-            elif "-" in nome:
-                nome = nome.replace("-", "_")
-            elif "Type: Null" == nome:
-                nome = "Tipo_Nulo"
-
-            if " " in nome:
-                nome = nome.replace(" ", "_")
-
-            data_to_neo4j = f""" 
-            CREATE ({nome}:POKEMON {{id: "{i}", nome: "{data_converted["Nome"][i]}", peso: "{data_converted["Peso"][i]}", 
-                    tamanho: "{data_converted["Tamanho"][i]}", url: "{data_converted["URL"][i]}"}})"""
-
-            for tipo in data_converted["Tipos"][i]:
-                if tipo in type_set:
-                    data_to_neo4j += f"""
-                    CREATE ({nome})-[:TEM_TIPO]->({tipo})
-                    """
-                else:
-                    type_set.add(tipo)
-                    #criando os nos dos tipos e suas relacoes com os pokemons
-                    data_to_neo4j += f"""
-                    CREATE ({tipo}:TIPO {{nome: "{tipo}"}})
-                    CREATE ({nome})-[:TEM_TIPO]->({tipo})
-                    """
-
-            for habilidade in data_converted["Habilidades"][i]:
-                ability_name = habilidade["ability_name"]
-
-                if " " in ability_name:
-                    ability_name = ability_name.replace(" ", "_")
-
-                if "-" in ability_name:
-                    ability_name = ability_name.replace("-", "_")
-
-                if "'" in ability_name:
-                    ability_name = ability_name.replace("'", "_")
-
-                if ability_name in ability_set:
-                    #criando os nos das habilidades e suas relacoes com os pokemons
-                    data_to_neo4j += f""" 
-                    CREATE ({nome})-[:TEM_HABILIDADE]->({ability_name})"""
-                else:
-                    ability_set.add(ability_name)
-                    data_to_neo4j += f"""
-                    CREATE ({ability_name}:HABILIDADE {{nome: "{habilidade["ability_name"]}",
-                    descricao: "{habilidade["ability_desc"]}", url: "{habilidade["ability_url"]}"}}) 
-                    CREATE ({nome})-[:TEM_HABILIDADE]->({ability_name})
-                    """
-
-            conexoes.carrega_base(query=data_to_neo4j)
-
-        for i in data_converted["Evolucoes"]:
-            nome = data_converted["Nome"][i]
-
-            if "♀" in nome:
-                nome = nome.replace("♀ (female)", "_fem")
-            elif "♂" in nome:
-                nome = nome.replace("♂ (male)", "_masc")
-            elif "'" in nome:
-                nome = nome.replace("'", "_")
-            elif "." in nome:
-                nome = nome.replace(".", "")
-            elif "-" in nome:
-                nome = nome.replace("-", "_")
-            elif "Type: Null" == nome:
-                nome = "Tipo_Nulo"
-
-            if " " in nome:
-                nome = nome.replace(" ", "_")
-
-            for evolucao in data_converted["Evolucoes"][i]:
-                evo_tratado = evolucao["evo_pokemon_name"]
-
-                if "♀" in evo_tratado:
-                    evo_tratado = evo_tratado.replace("♀ (female)", "_fem")
-                elif "♂" in evo_tratado:
-                    evo_tratado = evo_tratado.replace("♂ (male)", "_masc")
-                elif "'" in evo_tratado:
-                    evo_tratado = evo_tratado.replace("'", "_")
-                elif "." in evo_tratado:
-                    evo_tratado = evo_tratado.replace(".", "")
-                elif "-" in evo_tratado:
-                    evo_tratado = evo_tratado.replace("-", "_")
-
-                if " " in evo_tratado:
-                    evo_tratado = evo_tratado.replace(" ", "_")
-
-                data_to_neo4j = f"""
-            CREATE ({nome})-[:EVOLUI_PARA]->({evo_tratado})"""
-
-                conexoes.carrega_base(query=data_to_neo4j)
-
-        conexoes.close()
-        consulta1 = consultar("""
-        MATCH (pokemon:POKEMON)-[:TEM_TIPO]->(tipoPokemon:TIPO)
-        WITH pokemon.nome AS nome
-        WHERE tipoPokemon = "Ground" AND toFloat(replace(pokemon.peso, ' kg', '')) > 10
-        RETURN nome""")
-        print(consulta1)
-        consulta2 = consultar("""
-        MATCH (pokemon:POKEMON)-[:EVOLUI_PARA]-(evolucao:POKEMON)
-        WHERE toFloat(replace(evolucao.peso, ' kg', '')) > toFloat(replace(pokemon.peso, ' kg', '')) * 2 
-        RETURN count(evolucao) as qtdEvolucoes
-        """)
-        print(consulta2)
-
-        #print(data_to_neo4j)
 
